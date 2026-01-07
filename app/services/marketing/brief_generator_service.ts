@@ -1,14 +1,38 @@
+import env from '#start/env'
+import openai from '#services/openai_client'
 import type Restaurant from '#models/restaurant'
 import type CampaignRequest from '#models/campaign_request'
 import type CampaignIdea from '#models/campaign_idea'
 import type Asset from '#models/asset'
 
-type Storybeat = {
-  tStart: number
-  tEnd: number
-  onScreen: string
-  shot: string
-  assetTagHint?: string
+type Brief = {
+  hook: string
+  cta: string
+  onScreenText: string[]
+  storyboard: Array<{
+    tStart: number
+    tEnd: number
+    onScreen: string
+    shot: string
+    assetTagHint?: string
+  }>
+  capcutRecipe: Array<{
+    step: number
+    clip: string
+    duration: string
+    onScreenText: string
+    notes: string
+  }>
+}
+
+function safeJsonParse<T>(s: string): T {
+  const cleaned = s
+    .trim()
+    .replace(/^```json/i, '')
+    .replace(/^```/i, '')
+    .replace(/```$/i, '')
+    .trim()
+  return JSON.parse(cleaned) as T
 }
 
 export default class BriefGeneratorService {
@@ -17,56 +41,67 @@ export default class BriefGeneratorService {
     campaignRequest: CampaignRequest
     idea: CampaignIdea
     assets: Asset[]
-  }) {
-    const duration = input.campaignRequest.duration
-    const total = duration === '6s' ? 6 : duration === '10s' ? 10 : 15
+  }): Promise<Brief> {
+    const model = env.get('OPENAI_TEXT_MODEL') || 'gpt-4.1'
+    const seconds =
+      input.campaignRequest.duration === '6s'
+        ? 6
+        : input.campaignRequest.duration === '10s'
+          ? 10
+          : 15
 
-    const findAssetByTag = (tag: string) => {
-      const a = input.assets.find((x) => Array.isArray(x.tags) && x.tags.includes(tag))
-      return a ? `${a.type}: ${a.url}` : `Asset sugerido con tag "${tag}" (no encontrado)`
-    }
-
-    const storyboard: Storybeat[] = [
-      {
-        tStart: 0,
-        tEnd: Math.min(2, total),
-        onScreen: 'Plan de hoy: Cantina 🔥',
-        shot: `Entrada/terraza. ${findAssetByTag('terraza')}`,
-        assetTagHint: 'terraza',
-      },
-      {
-        tStart: Math.min(2, total),
-        tEnd: Math.min(7, total),
-        onScreen: 'Cocteles + comida',
-        shot: `Close-up coctel. ${findAssetByTag('cocteles')}`,
-        assetTagHint: 'cocteles',
-      },
-      {
-        tStart: Math.min(7, total),
-        tEnd: total,
-        onScreen: 'Reserva por WhatsApp',
-        shot: `Ambiente/música. ${findAssetByTag('musica')}`,
-        assetTagHint: 'musica',
-      },
-    ].filter((b) => b.tStart < total)
-
-    const capcutRecipe = storyboard.map((b, idx) => ({
-      step: idx + 1,
-      clip: b.assetTagHint ?? 'general',
-      duration: `${b.tEnd - b.tStart}s`,
-      onScreenText: b.onScreen,
-      notes: b.shot,
+    const assetsSummary = input.assets.map((a) => ({
+      id: a.id,
+      type: a.type,
+      url: a.url,
+      tags: a.tags ?? [],
     }))
 
-    return {
-      hook: input.idea.title,
-      cta:
-        input.campaignRequest.objective === 'whatsapp'
-          ? 'Escríbenos por WhatsApp para reservar'
-          : 'Reserva tu mesa hoy',
-      onScreenText: storyboard.map((b) => b.onScreen),
-      storyboard,
-      capcutRecipe,
+    const prompt = `
+Eres un director creativo para anuncios de restaurante. Devuelve SOLO JSON válido.
+
+Restaurante:
+- name: ${input.restaurant.name}
+- tone: ${input.restaurant.tone ?? ''}
+- city/zone: ${input.restaurant.city ?? ''} / ${input.restaurant.zone ?? ''}
+
+Campaña:
+- objective: ${input.campaignRequest.objective}
+- dayToPush: ${input.campaignRequest.dayToPush}
+- seconds: ${seconds}
+
+Idea seleccionada:
+- title: ${input.idea.title}
+- description: ${input.idea.description}
+
+Assets disponibles (elige por tags; si no hay, sugiere):
+${JSON.stringify(assetsSummary, null, 2)}
+
+Devuelve EXACTAMENTE:
+{
+  "hook": "string",
+  "cta": "string",
+  "onScreenText": ["..."],
+  "storyboard": [
+    {"tStart":0,"tEnd":2,"onScreen":"...","shot":"...","assetTagHint":"terraza"}
+  ],
+  "capcutRecipe": [
+    {"step":1,"clip":"terraza","duration":"2s","onScreenText":"...","notes":"..."}
+  ]
+}
+`
+
+    const resp = await openai.responses.create({
+      model,
+      input: prompt,
+    })
+
+    const data = safeJsonParse<Brief>(resp.output_text)
+
+    if (!data.storyboard?.length || !data.capcutRecipe?.length) {
+      throw new Error('OpenAI no devolvió storyboard/receta en formato esperado')
     }
+
+    return data
   }
 }

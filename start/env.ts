@@ -27,5 +27,10 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_PORT: Env.schema.number(),
   DB_USER: Env.schema.string(),
   DB_PASSWORD: Env.schema.string.optional(),
-  DB_DATABASE: Env.schema.string()
+  DB_DATABASE: Env.schema.string(),
+
+  OPENAI_API_KEY: Env.schema.string(),
+  OPENAI_TEXT_MODEL: Env.schema.string.optional(),
+  OPENAI_VIDEO_MODEL: Env.schema.string.optional(),
+  OPENAI_VIDEO_SIZE: Env.schema.string.optional(),
 })

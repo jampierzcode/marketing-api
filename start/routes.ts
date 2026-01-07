@@ -8,6 +8,7 @@ const CampaignRequestsController = () => import('#controllers/campaign_requests_
 const CampaignIdeasController = () => import('#controllers/campaign_ideas_controller')
 const CreativeBriefsController = () => import('#controllers/creative_briefs_controller')
 
+const VideosController = () => import('#controllers/videos_controller')
 router.get('/health', async () => ({ ok: true }))
 
 router
@@ -31,5 +32,9 @@ router
 
     router.post('/campaign-requests/:id/brief', [CreativeBriefsController, 'generateForRequest'])
     router.get('/creative-briefs/:id', [CreativeBriefsController, 'show'])
+
+    router.post('/campaign-requests/:id/video', [VideosController, 'createForRequest'])
+    router.get('/videos/:videoId', [VideosController, 'status'])
+    router.get('/videos/:videoId/content', [VideosController, 'content'])
   })
   .prefix('/api')
